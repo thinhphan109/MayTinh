@@ -235,11 +235,5 @@ Kiểm tra này ngăn ghi tràn mảng và dành byte cuối cho `\0`. Ngoài ra
 4. Theo dõi mô phỏng: sau `999+9`, con trỏ ghi trỏ tới phần tử 5, con trỏ toán tử trỏ tới phần tử 3.
 5. Dùng kết quả biên dịch Arduino IDE để ghi dung lượng **Flash** và **SRAM** thực tế; chỉ đưa số liệu sau khi tự biên dịch, không suy ra tổng bộ nhớ từ bộ đệm 10 byte.
 
-## 10. Lưu ý về phạm vi kiểm thử
-
-File README mô tả các chức năng dự kiến theo mã nguồn. Dự án cần được biên dịch với môi trường Arduino AVR và kiểm thử thực tế với đúng Keypad/LCD trước khi sử dụng như kết quả thực nghiệm chính thức trong báo cáo.
-
----
-
 **File mã nguồn:** `MayTinh_ATmega328P_LCD20x4_BienDeHieu.ino`  
 **Chủ đề cốt lõi:** quản lý bộ đệm SRAM, con trỏ ghi/đọc, phép toán con trỏ, truyền địa chỉ cho hàm và lưu chuỗi hằng trong Flash.
