@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <Keypad.h>
-#include <LiquidCrystal.h>
-#include <stdint.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
 #include <stdio.h>
 
 const byte SO_HANG_PHIM = 4;
@@ -10,7 +10,6 @@ const byte SO_COT_LCD = 20;
 const byte SO_HANG_LCD = 4;
 const byte SO_CHU_SO_TOI_DA = 4;
 
-// 4 chu so + 1 toan tu + 4 chu so + 1 ky tu '\0' = 10 byte.
 const byte KICH_THUOC_BO_DEM = 2 * SO_CHU_SO_TOI_DA + 2;
 
 char maBanPhim[SO_HANG_PHIM][SO_COT_PHIM] = {
@@ -25,11 +24,28 @@ byte chanCotPhim[SO_COT_PHIM] = {2, 3, 4, 5};
 
 Keypad banPhim(makeKeymap(maBanPhim), chanHangPhim, chanCotPhim,
               SO_HANG_PHIM, SO_COT_PHIM);
-LiquidCrystal manHinhLCD(A0, A1, A2, A3, A4, A5);
+
+LiquidCrystal_I2C manHinhLCD(0x27, SO_COT_LCD, SO_HANG_LCD);
+byte diaChiLCD = 0;
+
+bool coThietBiI2C(byte diaChi) {
+  Wire.beginTransmission(diaChi);
+  return Wire.endTransmission() == 0;
+}
+
+byte timDiaChiLCD() {
+  const byte diaChiDau[2] = {0x20, 0x38};
+  for (byte nhom = 0; nhom < 2; ++nhom) {
+    for (byte diaChi = diaChiDau[nhom]; diaChi < diaChiDau[nhom] + 8; ++diaChi) {
+      if (coThietBiI2C(diaChi)) return diaChi;
+    }
+  }
+  return 0;
+}
 
 char boDemBieuThuc[KICH_THUOC_BO_DEM];
-char *conTroGhiKyTu = boDemBieuThuc;  // O nho se ghi tiep theo
-char *conTroToanTu = nullptr;         // Dia chi toan tu; chua co = nullptr
+char *conTroGhiKyTu = boDemBieuThuc;
+char *conTroToanTu = nullptr;
 bool daTinhXong = false;
 
 void xoaDongLCD(byte hang) {
@@ -40,13 +56,11 @@ void xoaDongLCD(byte hang) {
   manHinhLCD.setCursor(0, hang);
 }
 
-// In chuoi hang duoc luu o Flash, truyen vao bang F("...").
 void inDongFlash(byte hang, const __FlashStringHelper *noiDung) {
   xoaDongLCD(hang);
   manHinhLCD.print(noiDung);
 }
 
-// In chuoi nam trong SRAM, doc chuoi thong qua con tro.
 void inDongSRAM(byte hang, const char *conTroChuoi) {
   xoaDongLCD(hang);
   manHinhLCD.print(conTroChuoi);
@@ -69,21 +83,22 @@ void xoaBieuThuc() {
 }
 
 bool ghiKyTuVaoBoDem(char kyTu) {
+
   if (conTroGhiKyTu >= boDemBieuThuc + KICH_THUOC_BO_DEM - 1) {
     inDongFlash(2, F("LOI: BO DEM DAY"));
     return false;
   }
 
-  *conTroGhiKyTu = kyTu;  // Ghi qua con tro (truy cap gian tiep)
-  ++conTroGhiKyTu;       // Chuyen sang dia chi o nho ke tiep
-  *conTroGhiKyTu = '\0'; // Ket thuc chuoi
+  *conTroGhiKyTu = kyTu;
+  ++conTroGhiKyTu;
+  *conTroGhiKyTu = '\0';
   hienThiBieuThuc();
   return true;
 }
 
 void nhapChuSo(char chuSo) {
   if (daTinhXong) {
-    xoaBieuThuc(); // Nhan so moi sau ket qua -> phep tinh moi
+    xoaBieuThuc();
   }
 
   byte soChuSoDaNhap;
@@ -135,7 +150,7 @@ const char *docSoNguyen(const char *conTroDocKyTu, int32_t *conTroGiaTriSo) {
     ++soChuSoDaDoc;
   }
 
-  *conTroGiaTriSo = soDangDoc; // Ghi gia tri vao bien ben ngoai ham
+  *conTroGiaTriSo = soDangDoc;
   return conTroDocKyTu;
 }
 
@@ -162,7 +177,7 @@ void tinhBieuThuc() {
     return;
   }
 
-  char chuoiKetQua[SO_COT_LCD + 1]; // 21 byte tam tren stack
+  char chuoiKetQua[SO_COT_LCD + 1];
   int32_t ketQua = 0;
 
   switch (toanTu) {
@@ -192,7 +207,6 @@ void tinhBieuThuc() {
   daTinhXong = true;
 }
 
-// Ban phim A,B,C,D chuyen thanh ky tu toan hoc +,-,*,/.
 char doiPhimSangToanTu(char phim) {
   switch (phim) {
     case 'A': return '+';
@@ -204,14 +218,31 @@ char doiPhimSangToanTu(char phim) {
 }
 
 void setup() {
+  Serial.begin(9600);
+  Wire.begin();
   banPhim.setDebounceTime(20);
-  manHinhLCD.begin(SO_COT_LCD, SO_HANG_LCD);
+
+  diaChiLCD = timDiaChiLCD();
+  if (diaChiLCD == 0) {
+    Serial.println(F("KHONG TIM THAY LCD I2C: kiem tra A4/A5, 5V, GND"));
+    return;
+  }
+
+  manHinhLCD = LiquidCrystal_I2C(diaChiLCD, SO_COT_LCD, SO_HANG_LCD);
+  manHinhLCD.init();
+  manHinhLCD.backlight();
+
+  Serial.print(F("LCD I2C tai dia chi 0x"));
+  Serial.println(diaChiLCD, HEX);
+
   inDongFlash(0, F("A:+ B:- C:* D:/"));
   inDongFlash(3, F("*=XOA      #=TINH"));
   xoaBieuThuc();
 }
 
 void loop() {
+  if (diaChiLCD == 0) return;
+
   char phimDuocNhan = banPhim.getKey();
   if (phimDuocNhan == NO_KEY) {
     return;
